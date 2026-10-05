@@ -4075,3 +4075,16 @@ h3 {
     touch-action: pan-y;
   }
 }
+/* Step 7: improve mobile message readability. */
+@media (max-width: 700px) {
+  .template-app .chat-bubble {
+    max-width: 92%;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .template-app .chat-bubble.user {
+    max-width: 88%;
+  }
+}
