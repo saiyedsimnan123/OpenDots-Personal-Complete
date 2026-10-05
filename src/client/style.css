@@ -4054,3 +4054,16 @@ h3 {
     flex: 0 0 auto;
   }
 }
+/* Step 5: improve mobile navigation touch targets. */
+@media (max-width: 700px) {
+  .template-app .mobile-menu {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .template-app.app .nav-item,
+  .template-app.app .dot-nav,
+  .template-app.app .space-nav-row > .space-disclosure {
+    touch-action: manipulation;
+  }
+}
