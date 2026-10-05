@@ -4067,3 +4067,11 @@ h3 {
     touch-action: manipulation;
   }
 }
+/* Step 6: improve mobile chat scrolling. */
+@media (max-width: 700px) {
+  .template-app .chat-transcript {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+}
