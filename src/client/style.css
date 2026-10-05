@@ -4032,3 +4032,25 @@ h3 {
     padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
 }
+/* Step 4: improve mobile keyboard and composer behavior. */
+@media (max-width: 700px) {
+  .template-app .chat-composer {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .template-app .chat-compose-row {
+    min-width: 0;
+  }
+
+  .template-app .chat-compose-row textarea {
+    min-width: 0;
+    max-height: 96px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .template-app .chat-compose-row .send-button {
+    flex: 0 0 auto;
+  }
+}
