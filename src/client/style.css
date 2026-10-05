@@ -4026,3 +4026,9 @@ h3 {
     touch-action: pan-y;
   }
 }
+/* Step 3: protect mobile composer from phone navigation/gesture area. */
+@media (max-width: 700px) {
+  .template-app .chat-composer {
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+}
