@@ -4023,6 +4023,6 @@ h3 {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
-touch-action: pan-y;
+    touch-action: pan-y;
   }
 }
