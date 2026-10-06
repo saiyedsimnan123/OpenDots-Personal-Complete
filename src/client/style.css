@@ -4088,3 +4088,17 @@ h3 {
     max-width: 88%;
   }
 }
+/* Step 8: improve mobile button and control touch targets. */
+@media (max-width: 700px) {
+  .template-app .send-button,
+  .template-app .icon-button,
+  .template-app .task-controls button,
+  .template-app .chat-error button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .template-app .starter-suggestions button {
+    min-height: 44px;
+  }
+}
