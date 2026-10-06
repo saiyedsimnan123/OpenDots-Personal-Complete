@@ -4118,3 +4118,20 @@ h3 {
     flex-shrink: 0;
   }
 }
+/* Step 10: improve mobile voice and call controls. */
+@media (max-width: 700px) {
+  .template-app .call-controls {
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .template-app .call-controls button {
+    min-width: 52px;
+    min-height: 52px;
+  }
+
+  .template-app .call-controls button > span {
+    width: 44px;
+    height: 44px;
+  }
+}
