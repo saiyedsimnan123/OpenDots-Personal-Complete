@@ -296,9 +296,9 @@ export class Store {
       this.event(claim.id, claim.lease, error);
     });
   }
-  approvals(): Approval[] {
-  const now = Date.now();
-  this.db
+    approvals(): Approval[] {
+    const now = Date.now();
+    this.db
     .prepare(
       "UPDATE approvals SET status='expired' WHERE status='pending' AND expiresAt<=?",
     )
