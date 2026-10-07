@@ -13,6 +13,23 @@ import type {
   TaskEvent,
 } from '../shared/types.js';
 
+export type ApprovalStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'expired'
+  | 'executed'
+  | 'failed';
+
+export interface Approval {
+  id: string;
+  action: string;
+  description: string;
+  status: ApprovalStatus;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export type Claim = Task & { lease: string };
 const defaults: Settings = {
   name: 'Dot',
