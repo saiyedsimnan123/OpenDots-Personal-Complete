@@ -296,6 +296,18 @@ export class Store {
       this.event(claim.id, claim.lease, error);
     });
   }
+  approvals(): Approval[] {
+  const now = Date.now();
+  this.db
+    .prepare(
+      "UPDATE approvals SET status='expired' WHERE status='pending' AND expiresAt<=?",
+    )
+    .run(now);
+
+  return this.db
+    .prepare('SELECT * FROM approvals ORDER BY createdAt DESC')
+    .all() as unknown as Approval[];
+  }
   memories(): Memory[] {
     return this.db
       .prepare('SELECT * FROM memories ORDER BY createdAt DESC')
