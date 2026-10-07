@@ -1,0 +1,10 @@
+{
+  "name": "Personal AI Assistant",
+  "short_name": "AI Assistant",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111111",
+  "description": "A personal AI assistant powered by intelligent agents.",
+  "icons": []
+}
