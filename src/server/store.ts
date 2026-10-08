@@ -334,7 +334,8 @@ export class Store {
       throw new Error('Approval expiry must be in the future.');
     }
         this.db
-      .prepare("INSERT INTO approvals VALUES (?, ?, ?, 'pending', ?, ?)")
+      .prepare("INSERT INTO approvals
+     VALUES (?, ?, ?, 'pending', ?, ?)")
       .run(id, action, description, createdAt, expiresAt);
     return this.approval(id)!;
   }
