@@ -455,6 +455,10 @@ export class Store {
       .run(status, now, id);
     return this.approval(id);
   }
+  markApprovalFailed(id: string): Approval | undefined {
+    this.db.prepare("UPDATE approvals SET status='failed' WHERE id=?").run(id);
+    return this.approval(id);
+  }
   consumeApproval(
     id: string,
     expectedAction: string,

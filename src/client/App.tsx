@@ -40,6 +40,11 @@ import { TaskRow } from './TaskPresentation';
 import { TaskActions } from './TaskActions';
 import { WorkspaceDialog, type Dialog } from './WorkspaceDialog';
 import { ApprovalBanner } from './ApprovalBanner';
+import {
+  decideApproval as apiDecideApproval,
+  executeApproval as apiExecuteApproval,
+  approveAndExecuteApproval as apiApproveAndExecute,
+} from './approval-actions';
 
 export function App() {
   const [state, setState] = useState<State>();
@@ -167,39 +172,47 @@ export function App() {
   ) => {
     setError('');
     try {
-      await api(`/approvals/${id}/decision`, 'POST', { status: decision });
+      const res = await apiDecideApproval(id, decision);
       await refresh();
+      return res;
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Could not submit decision.',
-      );
+      await refresh();
+      const msg =
+        err instanceof Error ? err.message : 'Could not submit decision.';
+      setError(msg);
+      throw err;
     }
   };
   const executeApproval = async (id: string) => {
     setError('');
     try {
-      await api(`/approvals/${id}/execute`, 'POST', {});
+      const res = await apiExecuteApproval(id);
       await refresh();
+      return res;
     } catch (err) {
-      setError(
+      await refresh();
+      const msg =
         err instanceof Error
           ? err.message
-          : 'Could not execute approved action.',
-      );
+          : 'Could not execute approved action.';
+      setError(msg);
+      throw err;
     }
   };
   const decideAndExecuteApproval = async (id: string) => {
     setError('');
     try {
-      await api(`/approvals/${id}/decision`, 'POST', { status: 'approved' });
-      await api(`/approvals/${id}/execute`, 'POST', {});
+      const res = await apiApproveAndExecute(id);
       await refresh();
+      return res;
     } catch (err) {
-      setError(
+      await refresh();
+      const msg =
         err instanceof Error
           ? err.message
-          : 'Could not approve and execute action.',
-      );
+          : 'Could not approve and execute action.';
+      setError(msg);
+      throw err;
     }
   };
   const dot =
@@ -584,10 +597,10 @@ export function App() {
         <ApprovalBanner
           approvals={state.approvals}
           dots={workspace.dots}
-          onApprove={(id) => void decideApproval(id, 'approved')}
-          onReject={(id) => void decideApproval(id, 'rejected')}
-          onExecute={(id) => void executeApproval(id)}
-          onApproveAndExecute={(id) => void decideAndExecuteApproval(id)}
+          onApprove={(id) => decideApproval(id, 'approved')}
+          onReject={(id) => decideApproval(id, 'rejected')}
+          onExecute={(id) => executeApproval(id)}
+          onApproveAndExecute={(id) => decideAndExecuteApproval(id)}
         />
         {view === 'space' ? (
           <SpaceWorkspace

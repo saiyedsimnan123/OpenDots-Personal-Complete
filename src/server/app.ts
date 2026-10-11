@@ -346,7 +346,7 @@ export function createApp({
         );
         return c.json({ ok: true, status: 'executed', result });
       } catch (err) {
-        store.updateApprovalStatus(id, 'failed');
+        store.markApprovalFailed(id);
         return c.json(
           { error: err instanceof Error ? err.message : 'Execution failed.' },
           500,
