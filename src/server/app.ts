@@ -1,4 +1,6 @@
 import { computerRoutes } from './computer-routes.js';
+import { isConsequentialAction } from '../shared/types.js';
+import type { ComputerAction } from '../shared/computer-types.js';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { timingSafeEqual } from 'node:crypto';
@@ -73,7 +75,7 @@ export function createApp({
       return c.json({ error: 'Use application/json.' }, 415);
     await next();
   });
-  if (platform) app.route('/api', computerRoutes(platform.computers));
+  if (platform) app.route('/api', computerRoutes(platform.computers, store));
   const voice = platform ? new VoiceService(platform) : undefined;
   if (platform && voice) app.route('/api', workspaceRoutes(platform, voice));
   app.get('/api/state', (c) =>
@@ -227,7 +229,9 @@ export function createApp({
     const parsed = z
       .object({
         action: z.string().trim().min(1).max(100),
+        target: z.string().trim().max(100).optional(),
         description: z.string().trim().min(1).max(2000),
+        params: z.record(z.string(), z.unknown()).nullable().optional(),
         expiresAt: z.number().int(),
       })
       .strict()
@@ -239,6 +243,8 @@ export function createApp({
         parsed.data.action,
         parsed.data.description,
         parsed.data.expiresAt,
+        parsed.data.target ?? '',
+        parsed.data.params ?? null,
       );
       return c.json(approval, 201);
     } catch (e) {
@@ -251,6 +257,12 @@ export function createApp({
     }
   });
   app.post('/api/approvals/:id/decision', async (c) => {
+    if (c.req.header('x-actor') === 'agent' || c.req.header('x-agent-call')) {
+      return c.json(
+        { error: 'AI agents cannot approve consequential actions.' },
+        403,
+      );
+    }
     const parsed = z
       .object({
         status: z.enum(['approved', 'rejected']),
@@ -268,6 +280,81 @@ export function createApp({
       parsed.data.status,
     );
     return c.json(updated);
+  });
+  app.post('/api/approvals/:id/execute', async (c) => {
+    const id = c.req.param('id');
+    const existing = store.approval(id);
+    if (!existing) return c.json({ error: 'Approval not found.' }, 404);
+    if (existing.status === 'executed')
+      return c.json(
+        { error: 'Approval request has already been executed.' },
+        409,
+      );
+    if (existing.status === 'expired')
+      return c.json({ error: 'Approval request has expired.' }, 403);
+    if (existing.status === 'rejected')
+      return c.json(
+        { error: 'Approval request was rejected by the owner.' },
+        403,
+      );
+    if (existing.status !== 'approved')
+      return c.json(
+        { error: 'Approval request is pending human decision.' },
+        403,
+      );
+
+    // Revalidate user's authorization and permissions immediately before execution
+    if (platform && isConsequentialAction(existing.action)) {
+      if (!existing.target)
+        return c.json({ error: 'Approval target is required.' }, 400);
+      const dot = platform.workspace.dot(existing.target);
+      if (!dot) return c.json({ error: 'Target Dot not found.' }, 404);
+      const perms = platform.workspace.computers.permissions(existing.target);
+      if (!perms.enabled)
+        return c.json(
+          { error: 'Computer permissions are disabled for this Dot.' },
+          403,
+        );
+      if (existing.action === 'exec' && !perms.shell)
+        return c.json(
+          { error: 'Shell permission is disabled for this Dot.' },
+          403,
+        );
+      if (existing.action === 'files_delete' && !perms.files)
+        return c.json(
+          { error: 'Files permission is disabled for this Dot.' },
+          403,
+        );
+    }
+
+    const consumed = store.consumeApproval(
+      id,
+      existing.action,
+      existing.target,
+      existing.params,
+    );
+    if (!consumed.ok) return c.json({ error: consumed.error }, consumed.code);
+
+    if (platform && isConsequentialAction(existing.action)) {
+      try {
+        const result = await platform.computers.action(
+          existing.target!,
+          existing.action as ComputerAction,
+          existing.params,
+          'owner',
+          c.req.raw.signal,
+        );
+        return c.json({ ok: true, status: 'executed', result });
+      } catch (err) {
+        store.updateApprovalStatus(id, 'failed');
+        return c.json(
+          { error: err instanceof Error ? err.message : 'Execution failed.' },
+          500,
+        );
+      }
+    }
+
+    return c.json({ ok: true, status: 'executed' });
   });
   app.onError((error, c) => {
     console.error('API request failed:', error.name);

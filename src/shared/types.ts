@@ -61,10 +61,21 @@ export type ApprovalStatus =
 export interface Approval {
   id: string;
   action: string;
+  target?: string;
   description: string;
+  params?: Record<string, unknown> | null;
+  paramsHash?: string | null;
   status: ApprovalStatus;
   createdAt: number;
   expiresAt: number;
+  decidedAt?: number | null;
+  executedAt?: number | null;
+}
+
+export function isConsequentialAction(action: string): boolean {
+  return ['exec', 'files_delete', 'delete_page', 'send_message'].includes(
+    action,
+  );
 }
 
 export interface State {

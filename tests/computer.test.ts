@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHmac } from 'node:crypto';
 import { WorkspaceStore } from '../src/server/workspace.js';
+import { Store } from '../src/server/store.js';
 import { ComputerService } from '../src/server/computer-service.js';
 import { computerInputs } from '../src/shared/computer-types.js';
 import { computerTools } from '../src/server/computer-tools.js';
@@ -250,6 +251,52 @@ it('binds tools to the current Dot without exposing human or policy controls', a
   await read.execute?.({ path: 'notes.txt' });
   expect(check).toHaveBeenCalled();
   expect(f.calls.at(-1)?.url).toContain(f.id);
+});
+it('requires human approval for consequential agent actions in computerTools', async () => {
+  const f = fixture();
+  const store = new Store(':memory:');
+  const check = vi.fn();
+  const tools = computerTools(
+    f.service,
+    f.id,
+    check,
+    new AbortController().signal,
+    store,
+  );
+  const execTool = tools.find((t) => t.name === 'computer_exec')!;
+  const execute = execTool.execute as (input: unknown) => Promise<unknown>;
+
+  // 1. Calling consequential tool without approvalId creates a pending approval in store and throws
+  await expect(execute({ command: 'whoami' })).rejects.toThrow(
+    /requires human approval\. Approval request #/i,
+  );
+  expect(store.approvals()).toHaveLength(1);
+  const approval = store.approvals()[0];
+  expect(approval.status).toBe('pending');
+  expect(approval.action).toBe('exec');
+  expect(approval.target).toBe(f.id);
+
+  // 2. Calling with matching input but still pending fails
+  await expect(
+    execute({ command: 'whoami', approvalId: approval.id }),
+  ).rejects.toThrow(/pending/i);
+
+  // 3. Approve approval and execute
+  store.updateApprovalStatus(approval.id, 'approved');
+  f.handle(async () => Response.json({ stdout: 'dell' }));
+  const result = await execute({
+    command: 'whoami',
+    approvalId: approval.id,
+  });
+  expect(result).toBeDefined();
+  expect(store.approval(approval.id)?.status).toBe('executed');
+
+  // 4. Replaying the executed approval fails
+  await expect(
+    execute({ command: 'whoami', approvalId: approval.id }),
+  ).rejects.toThrow(/already been executed/i);
+
+  store.close();
 });
 it('bounds completed audit storage while preserving pending work', () => {
   const f = fixture();

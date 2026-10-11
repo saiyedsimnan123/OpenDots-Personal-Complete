@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { ComputerService } from './computer-service.js';
 import type { ComputerAction } from '../shared/computer-types.js';
-export function computerRoutes(computers: ComputerService) {
+import type { Store } from './store.js';
+import { isConsequentialAction } from '../shared/types.js';
+export function computerRoutes(computers: ComputerService, store?: Store) {
   const app = new Hono();
   app.onError((error, c) =>
     c.json(
@@ -34,13 +36,41 @@ export function computerRoutes(computers: ComputerService) {
     c.json(await computers.control(c.req.param('id'), 'release')),
   );
   app.post('/dots/:id/computer/actions', async (c) => {
+    const dotId = c.req.param('id');
     const body = z
-      .object({ action: z.string(), input: z.unknown() })
+      .object({
+        action: z.string(),
+        input: z.unknown(),
+        approvalId: z.string().optional(),
+      })
       .strict()
       .parse(await c.req.json());
+
+    if (isConsequentialAction(body.action)) {
+      if (!body.approvalId) {
+        return c.json(
+          {
+            error: `Consequential action '${body.action}' requires explicit human approval.`,
+          },
+          403,
+        );
+      }
+      if (store) {
+        const consumed = store.consumeApproval(
+          body.approvalId,
+          body.action,
+          dotId,
+          body.input,
+        );
+        if (!consumed.ok) {
+          return c.json({ error: consumed.error }, consumed.code);
+        }
+      }
+    }
+
     return c.json(
       await computers.action(
-        c.req.param('id'),
+        dotId,
         body.action as ComputerAction,
         body.input,
         'owner',

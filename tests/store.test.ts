@@ -153,4 +153,106 @@ describe('user approvals lifecycle', () => {
     const all = store.approvals();
     expect(all[0]?.status).toBe('expired');
   });
+
+  it('binds approvals to exact action, target, and arguments upon consumption', () => {
+    const { store } = fixture();
+    const now = Date.now();
+    const approval = store.createApproval(
+      'exec',
+      'Run command',
+      now + 60_000,
+      'dot-123',
+      { command: 'cat safe.txt' },
+    );
+    store.updateApprovalStatus(approval.id, 'approved');
+
+    // Mismatched action
+    const wrongAction = store.consumeApproval(
+      approval.id,
+      'files_delete',
+      'dot-123',
+      { command: 'cat safe.txt' },
+    );
+    expect(wrongAction.ok).toBe(false);
+    if (!wrongAction.ok) {
+      expect(wrongAction.code).toBe(403);
+      expect(wrongAction.error).toContain('action mismatch');
+    }
+
+    // Mismatched target
+    const wrongTarget = store.consumeApproval(
+      approval.id,
+      'exec',
+      'dot-other',
+      { command: 'cat safe.txt' },
+    );
+    expect(wrongTarget.ok).toBe(false);
+    if (!wrongTarget.ok) {
+      expect(wrongTarget.code).toBe(403);
+      expect(wrongTarget.error).toContain('target mismatch');
+    }
+
+    // Tampered arguments
+    const tamperedArgs = store.consumeApproval(approval.id, 'exec', 'dot-123', {
+      command: 'rm -rf /',
+    });
+    expect(tamperedArgs.ok).toBe(false);
+    if (!tamperedArgs.ok) {
+      expect(tamperedArgs.code).toBe(403);
+      expect(tamperedArgs.error).toContain('arguments mismatch');
+    }
+
+    // Valid consumption succeeds
+    const valid = store.consumeApproval(approval.id, 'exec', 'dot-123', {
+      command: 'cat safe.txt',
+    });
+    expect(valid.ok).toBe(true);
+    if (valid.ok) {
+      expect(valid.approval.status).toBe('executed');
+      expect(valid.approval.executedAt).toBeGreaterThan(0);
+    }
+
+    // Replay attempt fails with 409
+    const replay = store.consumeApproval(approval.id, 'exec', 'dot-123', {
+      command: 'cat safe.txt',
+    });
+    expect(replay.ok).toBe(false);
+    if (!replay.ok) {
+      expect(replay.code).toBe(409);
+      expect(replay.error).toContain('already been executed');
+    }
+  });
+
+  it('rejects consumption of pending, rejected, or expired approvals', () => {
+    const { store } = fixture();
+    const now = Date.now();
+
+    // 1. Pending approval cannot be consumed
+    const pending = store.createApproval('exec', 'Pending run', now + 60_000);
+    const consumePending = store.consumeApproval(pending.id, 'exec');
+    expect(consumePending.ok).toBe(false);
+    if (!consumePending.ok) expect(consumePending.code).toBe(403);
+
+    // 2. Rejected approval cannot be consumed
+    const rejected = store.createApproval('exec', 'Rejected run', now + 60_000);
+    store.updateApprovalStatus(rejected.id, 'rejected');
+    const consumeRejected = store.consumeApproval(rejected.id, 'exec');
+    expect(consumeRejected.ok).toBe(false);
+    if (!consumeRejected.ok) expect(consumeRejected.code).toBe(403);
+
+    // 3. Expired approval cannot be consumed
+    const expired = store.createApproval(
+      'exec',
+      'Expired run',
+      Date.now() + 15,
+    );
+    store.updateApprovalStatus(expired.id, 'approved');
+    const start = Date.now();
+    while (Date.now() - start < 30) {
+      /* wait */
+    }
+    const consumeExpired = store.consumeApproval(expired.id, 'exec');
+    expect(consumeExpired.ok).toBe(false);
+    if (!consumeExpired.ok) expect(consumeExpired.code).toBe(403);
+  });
 });

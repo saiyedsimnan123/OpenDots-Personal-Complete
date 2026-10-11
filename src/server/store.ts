@@ -1,7 +1,34 @@
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+
+export function canonicalJson(obj: unknown): string {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(canonicalJson).join(',') + ']';
+  }
+  const keys = Object.keys(obj as Record<string, unknown>).sort();
+  return (
+    '{' +
+    keys
+      .map(
+        (k) =>
+          JSON.stringify(k) +
+          ':' +
+          canonicalJson((obj as Record<string, unknown>)[k]),
+      )
+      .join(',') +
+    '}'
+  );
+}
+
+export function hashParams(params: unknown): string {
+  if (params === undefined || params === null) return '';
+  return createHash('sha256').update(canonicalJson(params)).digest('hex');
+}
 import type {
   Action,
   Approval,
@@ -35,11 +62,38 @@ export class Store {
       CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, taskId TEXT NOT NULL, status TEXT NOT NULL, startedAt INTEGER NOT NULL, finishedAt INTEGER, result TEXT, error TEXT);
       CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, taskId TEXT NOT NULL, runId TEXT, text TEXT NOT NULL, createdAt INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, text TEXT NOT NULL, createdAt INTEGER NOT NULL);
-      CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, action TEXT NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, expiresAt INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, action TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', description TEXT NOT NULL, params TEXT, paramsHash TEXT, status TEXT NOT NULL, createdAt INTEGER NOT NULL, expiresAt INTEGER NOT NULL, decidedAt INTEGER, executedAt INTEGER);
       CREATE INDEX IF NOT EXISTS approvals_status ON approvals(status, expiresAt);
       CREATE INDEX IF NOT EXISTS tasks_due ON tasks(status, nextRunAt);
       CREATE INDEX IF NOT EXISTS runs_task ON runs(taskId, startedAt);
       CREATE INDEX IF NOT EXISTS events_task ON events(taskId, id);`);
+    try {
+      this.db.exec(
+        "ALTER TABLE approvals ADD COLUMN target TEXT NOT NULL DEFAULT '';",
+      );
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec('ALTER TABLE approvals ADD COLUMN params TEXT;');
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec('ALTER TABLE approvals ADD COLUMN paramsHash TEXT;');
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec('ALTER TABLE approvals ADD COLUMN decidedAt INTEGER;');
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec('ALTER TABLE approvals ADD COLUMN executedAt INTEGER;');
+    } catch {
+      // Column may already exist
+    }
     this.db
       .prepare('INSERT OR IGNORE INTO settings VALUES (1, ?)')
       .run(JSON.stringify(defaults));
@@ -302,6 +356,37 @@ export class Store {
       this.db.prepare('DELETE FROM memories WHERE id=?').run(id).changes > 0
     );
   }
+  private mapApproval(row: unknown): Approval | undefined {
+    if (!row) return undefined;
+    const r = row as {
+      id: string;
+      action: string;
+      target: string;
+      description: string;
+      params: string | null;
+      paramsHash: string | null;
+      status: ApprovalStatus;
+      createdAt: number;
+      expiresAt: number;
+      decidedAt: number | null;
+      executedAt: number | null;
+    };
+    return {
+      id: r.id,
+      action: r.action,
+      target: r.target || undefined,
+      description: r.description,
+      params: r.params
+        ? (JSON.parse(r.params) as Record<string, unknown>)
+        : null,
+      paramsHash: r.paramsHash || null,
+      status: r.status,
+      createdAt: r.createdAt,
+      expiresAt: r.expiresAt,
+      decidedAt: r.decidedAt,
+      executedAt: r.executedAt,
+    };
+  }
   approvals(): Approval[] {
     const now = Date.now();
     this.db
@@ -309,50 +394,144 @@ export class Store {
         "UPDATE approvals SET status='expired' WHERE status='pending' AND expiresAt<=?",
       )
       .run(now);
-    return this.db
+    const rows = this.db
       .prepare('SELECT * FROM approvals ORDER BY createdAt DESC')
-      .all() as unknown as Approval[];
+      .all();
+    return rows.map((r) => this.mapApproval(r)!);
   }
   approval(id: string): Approval | undefined {
-    const row = this.db
-      .prepare('SELECT * FROM approvals WHERE id=?')
-      .get(id) as unknown as Approval | undefined;
+    const row = this.db.prepare('SELECT * FROM approvals WHERE id=?').get(id);
     if (!row) return undefined;
-    if (row.status === 'pending' && row.expiresAt <= Date.now()) {
+    const parsed = this.mapApproval(row)!;
+    if (parsed.status === 'pending' && parsed.expiresAt <= Date.now()) {
       this.db
         .prepare(
           "UPDATE approvals SET status='expired' WHERE id=? AND status='pending'",
         )
         .run(id);
-      return { ...row, status: 'expired' };
+      return { ...parsed, status: 'expired' };
     }
-    return row;
+    return parsed;
   }
   createApproval(
     action: string,
     description: string,
     expiresAt: number,
+    target = '',
+    params: Record<string, unknown> | null = null,
     id: string = randomUUID(),
+    now = Date.now(),
   ): Approval {
-    const createdAt = Date.now();
-    if (expiresAt <= createdAt) {
+    if (expiresAt <= now) {
       throw new Error('Approval expiry must be in the future.');
     }
+    const paramsStr = params ? JSON.stringify(params) : null;
+    const hash = params ? hashParams(params) : null;
     this.db
-      .prepare("INSERT INTO approvals VALUES (?, ?, ?, 'pending', ?, ?)")
-      .run(id, action, description, createdAt, expiresAt);
+      .prepare(
+        "INSERT INTO approvals VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL, NULL)",
+      )
+      .run(id, action, target, description, paramsStr, hash, now, expiresAt);
     return this.approval(id)!;
   }
   updateApprovalStatus(
     id: string,
     status: ApprovalStatus,
+    now = Date.now(),
   ): Approval | undefined {
     const approval = this.approval(id);
     if (!approval) return undefined;
     if (approval.status !== 'pending') return approval;
+    if (approval.expiresAt <= now) {
+      this.db
+        .prepare("UPDATE approvals SET status='expired' WHERE id=?")
+        .run(id);
+      return this.approval(id);
+    }
     this.db
-      .prepare("UPDATE approvals SET status=? WHERE id=? AND status='pending'")
-      .run(status, id);
+      .prepare(
+        "UPDATE approvals SET status=?, decidedAt=? WHERE id=? AND status='pending'",
+      )
+      .run(status, now, id);
     return this.approval(id);
+  }
+  consumeApproval(
+    id: string,
+    expectedAction: string,
+    expectedTarget?: string,
+    input?: unknown,
+    now = Date.now(),
+  ):
+    | { ok: true; approval: Approval }
+    | { ok: false; error: string; code: 400 | 403 | 404 | 409 } {
+    return this.transaction(() => {
+      const row = this.approval(id);
+      if (!row) {
+        return { ok: false, error: 'Approval request not found.', code: 404 };
+      }
+      if (row.status === 'executed') {
+        return {
+          ok: false,
+          error: 'Approval request has already been executed.',
+          code: 409,
+        };
+      }
+      if (row.status === 'expired' || row.expiresAt <= now) {
+        return { ok: false, error: 'Approval request has expired.', code: 403 };
+      }
+      if (row.status === 'rejected') {
+        return {
+          ok: false,
+          error: 'Approval request was rejected by the owner.',
+          code: 403,
+        };
+      }
+      if (row.status !== 'approved') {
+        return {
+          ok: false,
+          error: 'Approval request is pending human decision.',
+          code: 403,
+        };
+      }
+      if (row.action !== expectedAction) {
+        return {
+          ok: false,
+          error: `Approval action mismatch: approved for '${row.action}', not '${expectedAction}'.`,
+          code: 403,
+        };
+      }
+      if (row.target && expectedTarget && row.target !== expectedTarget) {
+        return {
+          ok: false,
+          error: `Approval target mismatch: approved for target '${row.target}', not '${expectedTarget}'.`,
+          code: 403,
+        };
+      }
+      if (row.paramsHash) {
+        const incomingHash = hashParams(input);
+        if (incomingHash !== row.paramsHash) {
+          return {
+            ok: false,
+            error:
+              'Approval arguments mismatch: action input differs from approved parameters.',
+            code: 403,
+          };
+        }
+      }
+      const result = this.db
+        .prepare(
+          "UPDATE approvals SET status='executed', executedAt=? WHERE id=? AND status='approved' AND expiresAt>?",
+        )
+        .run(now, id, now);
+      if (result.changes === 0) {
+        return {
+          ok: false,
+          error:
+            'Approval request was already consumed by another concurrent operation.',
+          code: 409,
+        };
+      }
+      return { ok: true, approval: this.approval(id)! };
+    });
   }
 }
