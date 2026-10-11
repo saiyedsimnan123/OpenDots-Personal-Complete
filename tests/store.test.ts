@@ -89,3 +89,68 @@ describe('durable task lifecycle', () => {
     ).toBe(true);
   });
 });
+
+describe('user approvals lifecycle', () => {
+  it('creates approvals with future expiration', () => {
+    const { store } = fixture();
+    const now = Date.now();
+    const approval = store.createApproval(
+      'send_external_message',
+      'Send email to client',
+      now + 60_000,
+    );
+    expect(approval.action).toBe('send_external_message');
+    expect(approval.description).toBe('Send email to client');
+    expect(approval.status).toBe('pending');
+    expect(approval.expiresAt).toBe(now + 60_000);
+    expect(store.approval(approval.id)?.status).toBe('pending');
+  });
+
+  it('rejects expiration times that are not in the future', () => {
+    const { store } = fixture();
+    const now = Date.now();
+    expect(() =>
+      store.createApproval('delete_data', 'Purge audit log', now - 1000),
+    ).toThrow('Approval expiry must be in the future.');
+  });
+
+  it('updates status from pending to approved or rejected', () => {
+    const { store } = fixture();
+    const now = Date.now();
+    const approval = store.createApproval(
+      'execute_command',
+      'Run deployment script',
+      now + 30_000,
+    );
+    const approved = store.updateApprovalStatus(approval.id, 'approved');
+    expect(approved?.status).toBe('approved');
+    expect(store.approval(approval.id)?.status).toBe('approved');
+
+    // Attempting to transition already approved approval does not alter it
+    const redecided = store.updateApprovalStatus(approval.id, 'rejected');
+    expect(redecided?.status).toBe('approved');
+  });
+
+  it('marks overdue pending approvals as expired on retrieval', () => {
+    const { store } = fixture();
+    const now = Date.now();
+    const approval = store.createApproval(
+      'quick_action',
+      'Expiring shortly',
+      now + 5,
+    );
+    expect(approval.status).toBe('pending');
+
+    // Wait 10ms so it passes expiry
+    const start = Date.now();
+    while (Date.now() - start < 15) {
+      /* wait */
+    }
+
+    const fetched = store.approval(approval.id);
+    expect(fetched?.status).toBe('expired');
+
+    const all = store.approvals();
+    expect(all[0]?.status).toBe('expired');
+  });
+});

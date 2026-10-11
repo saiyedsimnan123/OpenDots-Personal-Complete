@@ -102,6 +102,45 @@ describe('API boundaries', () => {
     });
     expect(store.memories()).toHaveLength(0);
   });
+  it('manages human approval requests and decisions via api', async () => {
+    const { app, store } = fixture();
+    const stateRes = await app.request('/api/state');
+    expect(stateRes.status).toBe(200);
+    const stateBody = (await stateRes.json()) as { approvals: unknown[] };
+    expect(Array.isArray(stateBody.approvals)).toBe(true);
+
+    const now = Date.now();
+    const createRes = await app.request(
+      '/api/approvals',
+      json({
+        action: 'publish_report',
+        description: 'Publish quarterly summary',
+        expiresAt: now + 300_000,
+      }),
+    );
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as { id: string; status: string };
+    expect(created.status).toBe('pending');
+
+    const getRes = await app.request(`/api/approvals/${created.id}`);
+    expect(getRes.status).toBe(200);
+
+    const decisionRes = await app.request(
+      `/api/approvals/${created.id}/decision`,
+      json({ status: 'approved' }),
+    );
+    expect(decisionRes.status).toBe(200);
+    const decided = (await decisionRes.json()) as { status: string };
+    expect(decided.status).toBe('approved');
+    expect(store.approval(created.id)?.status).toBe('approved');
+
+    // Duplicate decision should return 409 conflict
+    const conflictRes = await app.request(
+      `/api/approvals/${created.id}/decision`,
+      json({ status: 'rejected' }),
+    );
+    expect(conflictRes.status).toBe(409);
+  });
 });
 it('rejects DNS-rebinding Host even with a matching hostile Origin', async () => {
   const { app } = fixture();

@@ -160,6 +160,20 @@ export function App() {
       return false;
     }
   };
+  const decideApproval = async (
+    id: string,
+    decision: 'approved' | 'rejected',
+  ) => {
+    setError('');
+    try {
+      await api(`/approvals/${id}/decision`, 'POST', { status: decision });
+      await refresh();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Could not submit decision.',
+      );
+    }
+  };
   const dot =
     workspace?.dots.find((item) => item.id === selectedDot) ??
     workspace?.dots[0];
@@ -539,6 +553,31 @@ export function App() {
             All Dots are paused. Active compute stops and scheduled tasks wait.
           </div>
         )}
+        {state.approvals
+          ?.filter((a) => a.status === 'pending')
+          .map((item) => (
+            <div className="approval-banner" key={item.id} role="alert">
+              <div className="approval-banner-content">
+                <span className="approval-badge">Approval Required</span>
+                <strong>{item.description}</strong>
+                <small>Action: {item.action}</small>
+              </div>
+              <div className="approval-banner-actions">
+                <button
+                  className="primary approve-btn"
+                  onClick={() => void decideApproval(item.id, 'approved')}
+                >
+                  Approve
+                </button>
+                <button
+                  className="secondary reject-btn"
+                  onClick={() => void decideApproval(item.id, 'rejected')}
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
         {view === 'space' ? (
           <SpaceWorkspace
             key={spaceId}

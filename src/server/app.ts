@@ -81,6 +81,7 @@ export function createApp({
       settings: store.settings(),
       tasks: store.tasks(),
       memories: store.memories(),
+      approvals: store.approvals(),
       mode: config.mode,
       configured: configured(config),
     }),
@@ -215,6 +216,59 @@ export function createApp({
       ? c.json({ ok: true })
       : c.json({ error: 'Memory not found.' }, 404),
   );
+  app.get('/api/approvals', (c) => c.json(store.approvals()));
+  app.get('/api/approvals/:id', (c) => {
+    const approval = store.approval(c.req.param('id'));
+    return approval
+      ? c.json(approval)
+      : c.json({ error: 'Approval not found.' }, 404);
+  });
+  app.post('/api/approvals', async (c) => {
+    const parsed = z
+      .object({
+        action: z.string().trim().min(1).max(100),
+        description: z.string().trim().min(1).max(2000),
+        expiresAt: z.number().int(),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid approval request.' }, 400);
+    try {
+      const approval = store.createApproval(
+        parsed.data.action,
+        parsed.data.description,
+        parsed.data.expiresAt,
+      );
+      return c.json(approval, 201);
+    } catch (e) {
+      return c.json(
+        {
+          error: e instanceof Error ? e.message : 'Could not create approval.',
+        },
+        400,
+      );
+    }
+  });
+  app.post('/api/approvals/:id/decision', async (c) => {
+    const parsed = z
+      .object({
+        status: z.enum(['approved', 'rejected']),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid decision status.' }, 400);
+    const existing = store.approval(c.req.param('id'));
+    if (!existing) return c.json({ error: 'Approval not found.' }, 404);
+    if (existing.status !== 'pending')
+      return c.json({ error: `Approval is already ${existing.status}.` }, 409);
+    const updated = store.updateApprovalStatus(
+      c.req.param('id'),
+      parsed.data.status,
+    );
+    return c.json(updated);
+  });
   app.onError((error, c) => {
     console.error('API request failed:', error.name);
     return c.json(

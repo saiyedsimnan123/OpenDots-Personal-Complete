@@ -55,10 +55,23 @@ export interface Detail {
   runs: Run[];
   events: TaskEvent[];
 }
+export type ApprovalStatus =
+  'pending' | 'approved' | 'rejected' | 'expired' | 'executed' | 'failed';
+
+export interface Approval {
+  id: string;
+  action: string;
+  description: string;
+  status: ApprovalStatus;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export interface State {
   settings: Settings;
   tasks: Task[];
   memories: Memory[];
+  approvals: Approval[];
   mode: 'sample' | 'live';
   configured: boolean;
 }
