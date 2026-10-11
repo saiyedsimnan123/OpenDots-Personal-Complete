@@ -360,18 +360,41 @@ export function WorkspaceDialog({
           )}
           {dialog.type === 'settings' && (
             <div className="config-note">
-              <strong>Service setup</strong>
-              <p>
+              <strong>Service setup & environment</strong>
+              <div className="setup-status-grid">
+                <div className="setup-status-row">
+                  <span>AI Model:</span>
+                  <strong>
+                    {workspace.setup.model
+                      ? 'Connected'
+                      : 'Missing (OPENAI_API_KEY, OPENAI_MODEL)'}
+                  </strong>
+                </div>
+                <div className="setup-status-row">
+                  <span>Intelligence streaming:</span>
+                  <strong>
+                    {workspace.setup.intelligence
+                      ? 'Connected'
+                      : 'Missing (INTELLIGENCE_API_KEY)'}
+                  </strong>
+                </div>
+                <div className="setup-status-row">
+                  <span>Voice calls:</span>
+                  <strong>
+                    {workspace.setup.voice
+                      ? 'Ready'
+                      : 'Optional (VOICE_API_KEY, VOICE_MODEL)'}
+                  </strong>
+                </div>
+                <div className="setup-status-row">
+                  <span>Slack channel:</span>
+                  <strong>{workspace.setup.slack.replaceAll('_', ' ')}</strong>
+                </div>
+              </div>
+              <p className="setup-env-help">
                 {workspace.setup.missing.length
-                  ? `Add ${workspace.setup.missing.join(', ')} to the server environment, then restart.`
-                  : 'Text configuration is present. A successful conversation confirms connectivity.'}
-              </p>
-              <p>
-                Slack: {workspace.setup.slack.replaceAll('_', ' ')}. Voice:{' '}
-                {workspace.setup.voice
-                  ? 'configuration present'
-                  : 'needs VOICE_API_KEY and VOICE_MODEL'}
-                .
+                  ? `Add ${workspace.setup.missing.join(', ')} to your .env file on the server, then restart.`
+                  : 'Configuration is present. A successful conversation confirms connectivity.'}
               </p>
               <a
                 href="https://github.com/CopilotKit/OpenDots/blob/main/docs/SETUP.md"

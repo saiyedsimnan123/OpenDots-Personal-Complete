@@ -133,17 +133,15 @@ describe('user approvals lifecycle', () => {
 
   it('marks overdue pending approvals as expired on retrieval', () => {
     const { store } = fixture();
-    const now = Date.now();
     const approval = store.createApproval(
       'quick_action',
       'Expiring shortly',
-      now + 5,
+      Date.now() + 50,
     );
     expect(approval.status).toBe('pending');
 
-    // Wait 10ms so it passes expiry
-    const start = Date.now();
-    while (Date.now() - start < 15) {
+    // Wait until it passes expiry
+    while (Date.now() <= approval.expiresAt + 5) {
       /* wait */
     }
 

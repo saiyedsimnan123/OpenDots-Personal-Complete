@@ -39,6 +39,7 @@ import { ResultPane } from './ResultPane';
 import { TaskRow } from './TaskPresentation';
 import { TaskActions } from './TaskActions';
 import { WorkspaceDialog, type Dialog } from './WorkspaceDialog';
+import { ApprovalBanner } from './ApprovalBanner';
 
 export function App() {
   const [state, setState] = useState<State>();
@@ -171,6 +172,33 @@ export function App() {
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Could not submit decision.',
+      );
+    }
+  };
+  const executeApproval = async (id: string) => {
+    setError('');
+    try {
+      await api(`/approvals/${id}/execute`, 'POST', {});
+      await refresh();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not execute approved action.',
+      );
+    }
+  };
+  const decideAndExecuteApproval = async (id: string) => {
+    setError('');
+    try {
+      await api(`/approvals/${id}/decision`, 'POST', { status: 'approved' });
+      await api(`/approvals/${id}/execute`, 'POST', {});
+      await refresh();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not approve and execute action.',
       );
     }
   };
@@ -553,31 +581,14 @@ export function App() {
             All Dots are paused. Active compute stops and scheduled tasks wait.
           </div>
         )}
-        {state.approvals
-          ?.filter((a) => a.status === 'pending')
-          .map((item) => (
-            <div className="approval-banner" key={item.id} role="alert">
-              <div className="approval-banner-content">
-                <span className="approval-badge">Approval Required</span>
-                <strong>{item.description}</strong>
-                <small>Action: {item.action}</small>
-              </div>
-              <div className="approval-banner-actions">
-                <button
-                  className="primary approve-btn"
-                  onClick={() => void decideApproval(item.id, 'approved')}
-                >
-                  Approve
-                </button>
-                <button
-                  className="secondary reject-btn"
-                  onClick={() => void decideApproval(item.id, 'rejected')}
-                >
-                  Reject
-                </button>
-              </div>
-            </div>
-          ))}
+        <ApprovalBanner
+          approvals={state.approvals}
+          dots={workspace.dots}
+          onApprove={(id) => void decideApproval(id, 'approved')}
+          onReject={(id) => void decideApproval(id, 'rejected')}
+          onExecute={(id) => void executeApproval(id)}
+          onApproveAndExecute={(id) => void decideAndExecuteApproval(id)}
+        />
         {view === 'space' ? (
           <SpaceWorkspace
             key={spaceId}
@@ -651,17 +662,26 @@ export function App() {
                       <div>
                         <strong>Connect your Dot</strong>
                         <p>
-                          Connect your model and conversation service in
-                          Settings to start chatting. Your Spaces and Dot
-                          preferences are ready to use.
+                          {workspace.setup.missing.length > 0
+                            ? `Missing required configuration: ${workspace.setup.missing.join(', ')}.`
+                            : 'Connect your model and conversation service in Settings to start chatting.'}
                         </p>
-                        <a
-                          href="https://github.com/CopilotKit/OpenDots/blob/main/docs/SETUP.md"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open the setup guide <ArrowUpRight size={12} />
-                        </a>
+                        <div className="setup-actions">
+                          <button
+                            type="button"
+                            className="setup-btn"
+                            onClick={() => setDialog({ type: 'settings' })}
+                          >
+                            Open Settings & setup
+                          </button>
+                          <a
+                            href="https://github.com/CopilotKit/OpenDots/blob/main/docs/SETUP.md"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open setup guide <ArrowUpRight size={12} />
+                          </a>
+                        </div>
                       </div>
                     </div>
                   )}
