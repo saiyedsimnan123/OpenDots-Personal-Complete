@@ -4,6 +4,7 @@ import { SpaceWorkspace } from './SpaceWorkspace';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { CopilotKitProvider } from '@copilotkit/react-core/v2';
 import {
+  Activity,
   ArrowUp,
   ArrowUpRight,
   BookOpen,
@@ -33,6 +34,7 @@ import type {
 } from '../shared/types';
 import { api, ApiError, authHeaders, setToken } from './api';
 import { Mascot } from './Mascot';
+import { SystemOverview } from './SystemOverview';
 import { Chat } from './Chat';
 import { ThreadList } from './ThreadList';
 import { ResultPane } from './ResultPane';
@@ -51,9 +53,9 @@ export function App() {
   const [workspace, setWorkspace] = useState<WorkspaceState>();
   const [selectedDot, setSelectedDot] = useState('');
   const [selectedThread, setSelectedThread] = useState<string>();
-  const [view, rawSetView] = useState<'chat' | 'tasks' | 'memories' | 'space'>(
-    'chat',
-  );
+  const [view, rawSetView] = useState<
+    'chat' | 'tasks' | 'memories' | 'space' | 'system'
+  >('chat');
   const dirtyPage = useRef(false);
   const [spaceId, setSpaceId] = useState('');
   const [pageId, setPageId] = useState<string>();
@@ -348,6 +350,15 @@ export function App() {
           <Clock3 size={18} />
         </button>
         <button
+          aria-label="System Overview"
+          onClick={() => {
+            setView('system');
+            setMobile(false);
+          }}
+        >
+          <Activity size={18} />
+        </button>
+        <button
           className="rail-settings"
           aria-label="Open settings"
           onClick={() => setDialog({ type: 'settings' })}
@@ -502,6 +513,16 @@ export function App() {
             <small>{state.memories.length}</small>
           </button>
           <button
+            className={`nav-item ${view === 'system' ? 'active' : ''}`}
+            onClick={() => {
+              setView('system');
+              setMobile(false);
+            }}
+          >
+            <Activity size={17} />
+            <span>System overview</span>
+          </button>
+          <button
             className="nav-item"
             onClick={() => setDialog({ type: 'settings' })}
           >
@@ -546,7 +567,9 @@ export function App() {
                   ? 'Activity'
                   : view === 'space'
                     ? 'Pages'
-                    : 'Memories'}
+                    : view === 'system'
+                      ? 'System Overview'
+                      : 'Memories'}
             </strong>
           </div>
           <div className="top-actions">
@@ -602,7 +625,14 @@ export function App() {
           onExecute={(id) => executeApproval(id)}
           onApproveAndExecute={(id) => decideAndExecuteApproval(id)}
         />
-        {view === 'space' ? (
+        {view === 'system' ? (
+          <SystemOverview
+            state={state}
+            workspace={workspace}
+            setView={setView}
+            setDialog={setDialog}
+          />
+        ) : view === 'space' ? (
           <SpaceWorkspace
             key={spaceId}
             space={
