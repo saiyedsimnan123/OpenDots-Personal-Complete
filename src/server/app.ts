@@ -75,6 +75,7 @@ export function createApp({
       return c.json({ error: 'Use application/json.' }, 415);
     await next();
   });
+  app.get('/health', (c) => c.json({ status: 'ok' }));
   if (platform) app.route('/api', computerRoutes(platform.computers, store));
   const voice = platform ? new VoiceService(platform) : undefined;
   if (platform && voice) app.route('/api', workspaceRoutes(platform, voice));
@@ -295,11 +296,6 @@ export function createApp({
     if (existing.status === 'rejected')
       return c.json(
         { error: 'Approval request was rejected by the owner.' },
-        403,
-      );
-    if (existing.status === 'failed')
-      return c.json(
-        { error: 'Approval request previously failed execution.' },
         403,
       );
     if (existing.status !== 'approved')

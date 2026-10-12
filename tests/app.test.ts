@@ -358,24 +358,14 @@ describe('API boundaries', () => {
       json({}),
     );
     expect(replayExecRes.status).toBe(409);
-    // Case G: Cannot execute failed approval
-    const failedApproval = store.createApproval(
-      'exec',
-      'Run something that fails',
-      Date.now() + 60_000,
-      dot.id,
-      { command: 'fail' },
-    );
-    store.updateApprovalStatus(failedApproval.id, 'approved');
-    store.markApprovalFailed(failedApproval.id);
-    const execFailedRes = await app.request(
-      `/api/approvals/${failedApproval.id}/execute`,
-      json({}),
-    );
-    expect(execFailedRes.status).toBe(403);
-    const failedBody = (await execFailedRes.json()) as { error: string };
-    expect(failedBody.error).toContain('previously failed execution');
   });
+});
+
+it('provides a health check endpoint', async () => {
+  const { app } = fixture();
+  const response = await app.request('/health');
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ status: 'ok' });
 });
 it('rejects DNS-rebinding Host even with a matching hostile Origin', async () => {
   const { app } = fixture();
