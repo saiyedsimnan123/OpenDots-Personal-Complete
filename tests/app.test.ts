@@ -360,6 +360,13 @@ describe('API boundaries', () => {
     expect(replayExecRes.status).toBe(409);
   });
 });
+
+it('provides a health check endpoint', async () => {
+  const { app } = fixture();
+  const response = await app.request('/health');
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ status: 'ok' });
+});
 it('rejects DNS-rebinding Host even with a matching hostile Origin', async () => {
   const { app } = fixture();
   const response = await app.request('http://attacker.example/api/tasks', {
