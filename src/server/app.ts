@@ -297,6 +297,11 @@ export function createApp({
         { error: 'Approval request was rejected by the owner.' },
         403,
       );
+    if (existing.status === 'failed')
+      return c.json(
+        { error: 'Approval request previously failed execution.' },
+        403,
+      );
     if (existing.status !== 'approved')
       return c.json(
         { error: 'Approval request is pending human decision.' },
