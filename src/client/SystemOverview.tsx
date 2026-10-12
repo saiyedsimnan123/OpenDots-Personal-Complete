@@ -1,5 +1,5 @@
-
 import type { State, WorkspaceState } from '../shared/types';
+import type { Dialog } from './WorkspaceDialog';
 
 import { Mascot } from './Mascot';
 import {
@@ -17,17 +17,13 @@ import {
   Folder,
   ArrowRight,
 } from 'lucide-react';
-import {
-  decideApproval,
-
-  approveAndExecuteApproval,
-} from './approval-actions';
+import { decideApproval, approveAndExecuteApproval } from './approval-actions';
 
 interface SystemOverviewProps {
   state?: State;
   workspace?: WorkspaceState;
   setView: (view: 'chat' | 'tasks' | 'memories' | 'space' | 'system') => void;
-  setDialog: (dialog: unknown) => void;
+  setDialog: (dialog: Dialog | undefined) => void;
   error?: string;
 }
 
